@@ -6,7 +6,6 @@ const pad = require('pad-right');
 program
   .option('-u, --user <type>', '<username>')
   .option('-p, --page <type>', 'page')
-  .option('-n, --namepad <type>', 'pad the name');
 program.parse(process.argv);
 
 if (!program.user) {
@@ -14,19 +13,42 @@ if (!program.user) {
   return;
 }
 
+async function getPage(page) {
+  const url = `https://api.github.com/users/${program.user}/repos?type=owner&sort=created&per_page=100&page=${page}`;
+  const res = await fetch(url)
+  if (!res.ok) {
+    return [];
+  }
+  const data = await res.json()
+  return data;
+}
+
 async function run() {
-  const page = program.page ? program.page : 1;
-  const url = `https://api.github.com/users/${program.user}/repos?type=owner&sort=created&page=${page}`;
-  const response = await fetch(url)
-    .then(res => res)
-    .then(d => d.json())
+  let end = "more... pages 10";
+  const list = [];
+  if (program.page) {
+    list.push(...await getPage(program.page));
+  } else {
+    let page = 1;
+    while (page <= 10) {
+      const data = await getPage(page);
+      if (!data.length) {
+        end = `done. pages ${page - 1}`;
+        break;
+      }
+      list.push(...data);
+      page++;
+    }
+  }
 
-  response.forEach(repo => {
+
+  for (const repo of list) {
     const name = pad(repo.name, program.namepad ? program.namepad : 50, ' ');
-    const date = pad(format(new Date(repo.created_at), "d-M-Y"), 12, ' ');
+    const date = pad(format(new Date(repo.created_at), "Y-MM-dd"), 12, ' ');
 
-    console.log(`${name} ${date} ${repo.url}`);
-  })
+    console.log(`${name} ${date} ${repo.html_url}`);
+  }
+  console.log(end);
 }
 
 run();
